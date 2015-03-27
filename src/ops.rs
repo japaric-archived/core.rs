@@ -995,8 +995,10 @@ impl fmt::Debug for RangeFull {
 #[stable(feature = "rust1", since = "1.0.0")]
 pub struct Range<Idx> {
     /// The lower bound of the range (inclusive).
+    #[stable(feature = "rust1", since = "1.0.0")]
     pub start: Idx,
     /// The upper bound of the range (exclusive).
+    #[stable(feature = "rust1", since = "1.0.0")]
     pub end: Idx,
 }
 
@@ -1013,10 +1015,9 @@ impl<Idx: fmt::Debug> fmt::Debug for Range<Idx> {
 #[stable(feature = "rust1", since = "1.0.0")]
 pub struct RangeFrom<Idx> {
     /// The lower bound of the range (inclusive).
+    #[stable(feature = "rust1", since = "1.0.0")]
     pub start: Idx,
 }
-
-
 
 #[stable(feature = "rust1", since = "1.0.0")]
 impl<Idx: fmt::Debug> fmt::Debug for RangeFrom<Idx> {
@@ -1031,6 +1032,7 @@ impl<Idx: fmt::Debug> fmt::Debug for RangeFrom<Idx> {
 #[stable(feature = "rust1", since = "1.0.0")]
 pub struct RangeTo<Idx> {
     /// The upper bound of the range (exclusive).
+    #[stable(feature = "rust1", since = "1.0.0")]
     pub end: Idx,
 }
 
@@ -1040,7 +1042,6 @@ impl<Idx: fmt::Debug> fmt::Debug for RangeTo<Idx> {
         write!(fmt, "..{:?}", self.end)
     }
 }
-
 
 /// The `Deref` trait is used to specify the functionality of dereferencing
 /// operations like `*v`.
@@ -1148,6 +1149,7 @@ impl<'a, T: ?Sized> DerefMut for &'a mut T {
 #[lang="fn"]
 #[stable(feature = "rust1", since = "1.0.0")]
 #[rustc_paren_sugar]
+#[cfg(stage0)]
 pub trait Fn<Args> {
     /// The returned type after the call operator is used.
     type Output;
@@ -1156,14 +1158,35 @@ pub trait Fn<Args> {
     extern "rust-call" fn call(&self, args: Args) -> Self::Output;
 }
 
+/// A version of the call operator that takes an immutable receiver.
+#[lang="fn"]
+#[stable(feature = "rust1", since = "1.0.0")]
+#[rustc_paren_sugar]
+#[cfg(not(stage0))]
+pub trait Fn<Args> : FnMut<Args> {
+    /// This is called when the call operator is used.
+    extern "rust-call" fn call(&self, args: Args) -> Self::Output;
+}
+
 /// A version of the call operator that takes a mutable receiver.
 #[lang="fn_mut"]
 #[stable(feature = "rust1", since = "1.0.0")]
 #[rustc_paren_sugar]
+#[cfg(stage0)]
 pub trait FnMut<Args> {
     /// The returned type after the call operator is used.
     type Output;
 
+    /// This is called when the call operator is used.
+    extern "rust-call" fn call_mut(&mut self, args: Args) -> Self::Output;
+}
+
+/// A version of the call operator that takes a mutable receiver.
+#[lang="fn_mut"]
+#[stable(feature = "rust1", since = "1.0.0")]
+#[rustc_paren_sugar]
+#[cfg(not(stage0))]
+pub trait FnMut<Args> : FnOnce<Args> {
     /// This is called when the call operator is used.
     extern "rust-call" fn call_mut(&mut self, args: Args) -> Self::Output;
 }
@@ -1180,6 +1203,7 @@ pub trait FnOnce<Args> {
     extern "rust-call" fn call_once(self, args: Args) -> Self::Output;
 }
 
+#[cfg(stage0)]
 impl<F: ?Sized, A> FnMut<A> for F
     where F : Fn<A>
 {
@@ -1190,6 +1214,7 @@ impl<F: ?Sized, A> FnMut<A> for F
     }
 }
 
+#[cfg(stage0)]
 impl<F,A> FnOnce<A> for F
     where F : FnMut<A>
 {
