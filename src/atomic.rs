@@ -78,10 +78,18 @@ use intrinsics;
 use cell::UnsafeCell;
 use marker::PhantomData;
 
+use default::Default;
+
 /// A boolean type which can be safely shared between threads.
 #[stable(feature = "rust1", since = "1.0.0")]
 pub struct AtomicBool {
     v: UnsafeCell<usize>,
+}
+
+impl Default for AtomicBool {
+    fn default() -> AtomicBool {
+        ATOMIC_BOOL_INIT
+    }
 }
 
 unsafe impl Sync for AtomicBool {}
@@ -92,12 +100,24 @@ pub struct AtomicIsize {
     v: UnsafeCell<isize>,
 }
 
+impl Default for AtomicIsize {
+    fn default() -> AtomicIsize {
+        ATOMIC_ISIZE_INIT
+    }
+}
+
 unsafe impl Sync for AtomicIsize {}
 
 /// An unsigned integer type which can be safely shared between threads.
 #[stable(feature = "rust1", since = "1.0.0")]
 pub struct AtomicUsize {
     v: UnsafeCell<usize>,
+}
+
+impl Default for AtomicUsize {
+    fn default() -> AtomicUsize {
+        ATOMIC_USIZE_INIT
+    }
 }
 
 unsafe impl Sync for AtomicUsize {}
@@ -107,6 +127,12 @@ unsafe impl Sync for AtomicUsize {}
 pub struct AtomicPtr<T> {
     p: UnsafeCell<usize>,
     _marker: PhantomData<*mut T>,
+}
+
+impl<T> Default for AtomicPtr<T> {
+    fn default() -> AtomicPtr<T> {
+        AtomicPtr::new(::ptr::null_mut())
+    }
 }
 
 unsafe impl<T> Sync for AtomicPtr<T> {}

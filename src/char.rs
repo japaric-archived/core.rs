@@ -10,7 +10,7 @@
 
 //! Character manipulation.
 //!
-//! For more details, see ::unicode::char (a.k.a. std::char)
+//! For more details, see ::rustc_unicode::char (a.k.a. std::char)
 
 #![allow(non_snake_case)]
 #![doc(primitive = "char")]
@@ -227,7 +227,7 @@ impl CharExt for char {
 #[inline]
 pub fn encode_utf8_raw(code: u32, dst: &mut [u8]) -> Option<usize> {
     // Marked #[inline] to allow llvm optimizing it away
-    if code < MAX_ONE_B && dst.len() >= 1 {
+    if code < MAX_ONE_B && !dst.is_empty() {
         dst[0] = code as u8;
         Some(1)
     } else if code < MAX_TWO_B && dst.len() >= 2 {
@@ -258,7 +258,7 @@ pub fn encode_utf8_raw(code: u32, dst: &mut [u8]) -> Option<usize> {
 #[inline]
 pub fn encode_utf16_raw(mut ch: u32, dst: &mut [u16]) -> Option<usize> {
     // Marked #[inline] to allow llvm optimizing it away
-    if (ch & 0xFFFF) == ch  && dst.len() >= 1 {
+    if (ch & 0xFFFF) == ch && !dst.is_empty() {
         // The BMP falls through (assuming non-surrogate, as it should)
         dst[0] = ch as u16;
         Some(1)

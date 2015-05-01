@@ -211,7 +211,7 @@ impl<T:Copy> Cell<T> {
         }
     }
 
-    /// Get a reference to the underlying `UnsafeCell`.
+    /// Gets a reference to the underlying `UnsafeCell`.
     ///
     /// # Unsafety
     ///
@@ -417,7 +417,7 @@ impl<T> RefCell<T> {
     ///
     /// let result = thread::spawn(move || {
     ///    let c = RefCell::new(5);
-    ///    let m = c.borrow_mut();
+    ///    let m = c.borrow();
     ///
     ///    let b = c.borrow_mut(); // this causes a panic
     /// }).join();
@@ -436,7 +436,7 @@ impl<T> RefCell<T> {
         }
     }
 
-    /// Get a reference to the underlying `UnsafeCell`.
+    /// Gets a reference to the underlying `UnsafeCell`.
     ///
     /// This can be used to circumvent `RefCell`'s safety checks.
     ///
@@ -537,7 +537,7 @@ impl<'b, T> Deref for Ref<'b, T> {
     }
 }
 
-/// Copy a `Ref`.
+/// Copies a `Ref`.
 ///
 /// The `RefCell` is already immutably borrowed, so this cannot fail.
 ///
@@ -647,7 +647,7 @@ pub struct UnsafeCell<T> {
 impl<T> !Sync for UnsafeCell<T> {}
 
 impl<T> UnsafeCell<T> {
-    /// Construct a new instance of `UnsafeCell` which will wrap the specified
+    /// Constructs a new instance of `UnsafeCell` which will wrap the specified
     /// value.
     ///
     /// All access to the inner value through methods is `unsafe`, and it is highly discouraged to
@@ -685,7 +685,7 @@ impl<T> UnsafeCell<T> {
         &self.value as *const T as *mut T
     }
 
-    /// Unwraps the value
+    /// Unwraps the value.
     ///
     /// # Unsafety
     ///

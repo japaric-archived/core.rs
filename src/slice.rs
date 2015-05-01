@@ -51,7 +51,7 @@ use result::Result::{Ok, Err};
 use ptr;
 use mem;
 use mem::size_of;
-use marker::{Send, Sized, Sync, self};
+use marker::{Send, Sync, self};
 use raw::Repr;
 // Avoid conflicts with *both* the Slice trait (buggy) and the `slice::raw` module.
 use raw::Slice as RawSlice;
@@ -204,7 +204,7 @@ impl<T> SliceExt for [T] {
 
     #[inline]
     fn first(&self) -> Option<&T> {
-        if self.len() == 0 { None } else { Some(&self[0]) }
+        if self.is_empty() { None } else { Some(&self[0]) }
     }
 
     #[inline]
@@ -217,7 +217,7 @@ impl<T> SliceExt for [T] {
 
     #[inline]
     fn last(&self) -> Option<&T> {
-        if self.len() == 0 { None } else { Some(&self[self.len() - 1]) }
+        if self.is_empty() { None } else { Some(&self[self.len() - 1]) }
     }
 
     #[inline]
@@ -296,7 +296,7 @@ impl<T> SliceExt for [T] {
 
     #[inline]
     fn first_mut(&mut self) -> Option<&mut T> {
-        if self.len() == 0 { None } else { Some(&mut self[0]) }
+        if self.is_empty() { None } else { Some(&mut self[0]) }
     }
 
     #[inline]
@@ -595,37 +595,6 @@ impl<T> ops::IndexMut<RangeFull> for [T] {
 // Common traits
 ////////////////////////////////////////////////////////////////////////////////
 
-/// Data that is viewable as a slice.
-#[unstable(feature = "core",
-           reason = "will be replaced by slice syntax")]
-#[deprecated(since = "1.0.0",
-             reason = "use std::convert::AsRef<[T]> instead")]
-pub trait AsSlice<T> {
-    /// Work with `self` as a slice.
-    fn as_slice<'a>(&'a self) -> &'a [T];
-}
-
-#[unstable(feature = "core", reason = "trait is experimental")]
-#[allow(deprecated)]
-impl<T> AsSlice<T> for [T] {
-    #[inline(always)]
-    fn as_slice<'a>(&'a self) -> &'a [T] { self }
-}
-
-#[unstable(feature = "core", reason = "trait is experimental")]
-#[allow(deprecated)]
-impl<'a, T, U: ?Sized + AsSlice<T>> AsSlice<T> for &'a U {
-    #[inline(always)]
-    fn as_slice(&self) -> &[T] { AsSlice::as_slice(*self) }
-}
-
-#[unstable(feature = "core", reason = "trait is experimental")]
-#[allow(deprecated)]
-impl<'a, T, U: ?Sized + AsSlice<T>> AsSlice<T> for &'a mut U {
-    #[inline(always)]
-    fn as_slice(&self) -> &[T] { AsSlice::as_slice(*self) }
-}
-
 #[stable(feature = "rust1", since = "1.0.0")]
 impl<'a, T> Default for &'a [T] {
     #[stable(feature = "rust1", since = "1.0.0")]
@@ -656,6 +625,36 @@ impl<'a, T> IntoIterator for &'a mut [T] {
     }
 }
 
+#[inline(always)]
+fn size_from_ptr<T>(_: *const T) -> usize {
+    mem::size_of::<T>()
+}
+
+
+// Use macro to be generic over const/mut
+macro_rules! slice_offset {
+    ($ptr:expr, $by:expr) => {{
+        let ptr = $ptr;
+        if size_from_ptr(ptr) == 0 {
+            transmute(ptr as usize + $by)
+        } else {
+            ptr.offset($by)
+        }
+    }};
+}
+
+macro_rules! slice_ref {
+    ($ptr:expr) => {{
+        let ptr = $ptr;
+        if size_from_ptr(ptr) == 0 {
+            // Use a non-null pointer value
+            &mut *(1 as *mut _)
+        } else {
+            transmute(ptr)
+        }
+    }};
+}
+
 // The shared definition of the `Iter` and `IterMut` iterators
 macro_rules! iterator {
     (struct $name:ident -> $ptr:ty, $elem:ty) => {
@@ -672,20 +671,9 @@ macro_rules! iterator {
                     if self.ptr == self.end {
                         None
                     } else {
-                        if mem::size_of::<T>() == 0 {
-                            // purposefully don't use 'ptr.offset' because for
-                            // vectors with 0-size elements this would return the
-                            // same pointer.
-                            self.ptr = transmute(self.ptr as usize + 1);
-
-                            // Use a non-null pointer value
-                            Some(&mut *(1 as *mut _))
-                        } else {
-                            let old = self.ptr;
-                            self.ptr = self.ptr.offset(1);
-
-                            Some(transmute(old))
-                        }
+                        let old = self.ptr;
+                        self.ptr = slice_offset!(self.ptr, 1);
+                        Some(slice_ref!(old))
                     }
                 }
             }
@@ -696,6 +684,22 @@ macro_rules! iterator {
                 let size = mem::size_of::<T>();
                 let exact = diff / (if size == 0 {1} else {size});
                 (exact, Some(exact))
+            }
+
+            #[inline]
+            fn count(self) -> usize {
+                self.size_hint().0
+            }
+
+            #[inline]
+            fn nth(&mut self, n: usize) -> Option<$elem> {
+                // Call helper method. Can't put the definition here because mut versus const.
+                self.iter_nth(n)
+            }
+
+            #[inline]
+            fn last(mut self) -> Option<$elem> {
+                self.next_back()
             }
         }
 
@@ -710,17 +714,8 @@ macro_rules! iterator {
                     if self.end == self.ptr {
                         None
                     } else {
-                        if mem::size_of::<T>() == 0 {
-                            // See above for why 'ptr.offset' isn't used
-                            self.end = transmute(self.end as usize - 1);
-
-                            // Use a non-null pointer value
-                            Some(&mut *(1 as *mut _))
-                        } else {
-                            self.end = self.end.offset(-1);
-
-                            Some(transmute(self.end))
-                        }
+                        self.end = slice_offset!(self.end, -1);
+                        Some(slice_ref!(self.end))
                     }
                 }
             }
@@ -815,6 +810,20 @@ impl<'a, T> Iter<'a, T> {
     #[unstable(feature = "core")]
     pub fn as_slice(&self) -> &'a [T] {
         make_slice!(T => &'a [T]: self.ptr, self.end)
+    }
+
+    // Helper function for Iter::nth
+    fn iter_nth(&mut self, n: usize) -> Option<&'a T> {
+        match self.as_slice().get(n) {
+            Some(elem_ref) => unsafe {
+                self.ptr = slice_offset!(elem_ref as *const _, 1);
+                Some(slice_ref!(elem_ref))
+            },
+            None => {
+                self.ptr = self.end;
+                None
+            }
+        }
     }
 }
 
@@ -944,6 +953,20 @@ impl<'a, T> IterMut<'a, T> {
     #[unstable(feature = "core")]
     pub fn into_slice(self) -> &'a mut [T] {
         make_mut_slice!(T => &'a mut [T]: self.ptr, self.end)
+    }
+
+    // Helper function for IterMut::nth
+    fn iter_nth(&mut self, n: usize) -> Option<&'a mut T> {
+        match make_mut_slice!(T => &'a mut [T]: self.ptr, self.end).get_mut(n) {
+            Some(elem_ref) => unsafe {
+                self.ptr = slice_offset!(elem_ref as *mut _, 1);
+                Some(slice_ref!(elem_ref))
+            },
+            None => {
+                self.ptr = self.end;
+                None
+            }
+        }
     }
 }
 
@@ -1306,7 +1329,7 @@ impl<'a, T> Iterator for Chunks<'a, T> {
 
     #[inline]
     fn next(&mut self) -> Option<&'a [T]> {
-        if self.v.len() == 0 {
+        if self.v.is_empty() {
             None
         } else {
             let chunksz = cmp::min(self.v.len(), self.size);
@@ -1318,7 +1341,7 @@ impl<'a, T> Iterator for Chunks<'a, T> {
 
     #[inline]
     fn size_hint(&self) -> (usize, Option<usize>) {
-        if self.v.len() == 0 {
+        if self.v.is_empty() {
             (0, Some(0))
         } else {
             let n = self.v.len() / self.size;
@@ -1333,7 +1356,7 @@ impl<'a, T> Iterator for Chunks<'a, T> {
 impl<'a, T> DoubleEndedIterator for Chunks<'a, T> {
     #[inline]
     fn next_back(&mut self) -> Option<&'a [T]> {
-        if self.v.len() == 0 {
+        if self.v.is_empty() {
             None
         } else {
             let remainder = self.v.len() % self.size;
@@ -1384,7 +1407,7 @@ impl<'a, T> Iterator for ChunksMut<'a, T> {
 
     #[inline]
     fn next(&mut self) -> Option<&'a mut [T]> {
-        if self.v.len() == 0 {
+        if self.v.is_empty() {
             None
         } else {
             let sz = cmp::min(self.v.len(), self.chunk_size);
@@ -1397,7 +1420,7 @@ impl<'a, T> Iterator for ChunksMut<'a, T> {
 
     #[inline]
     fn size_hint(&self) -> (usize, Option<usize>) {
-        if self.v.len() == 0 {
+        if self.v.is_empty() {
             (0, Some(0))
         } else {
             let n = self.v.len() / self.chunk_size;
@@ -1412,7 +1435,7 @@ impl<'a, T> Iterator for ChunksMut<'a, T> {
 impl<'a, T> DoubleEndedIterator for ChunksMut<'a, T> {
     #[inline]
     fn next_back(&mut self) -> Option<&'a mut [T]> {
-        if self.v.len() == 0 {
+        if self.v.is_empty() {
             None
         } else {
             let remainder = self.v.len() % self.chunk_size;

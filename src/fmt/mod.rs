@@ -1,4 +1,4 @@
-// Copyright 2013-2014 The Rust Project Developers. See the COPYRIGHT
+// Copyright 2013-2015 The Rust Project Developers. See the COPYRIGHT
 // file at the top-level directory of this distribution and at
 // http://rust-lang.org/COPYRIGHT.
 //
@@ -12,20 +12,16 @@
 
 #![stable(feature = "rust1", since = "1.0.0")]
 
+use prelude::*;
+
 use cell::{Cell, RefCell, Ref, RefMut, BorrowState};
-use char::CharExt;
-use clone::Clone;
-use iter::Iterator;
-use marker::{Copy, PhantomData, Sized};
+use marker::PhantomData;
 use mem;
-use option::Option;
-use option::Option::{Some, None};
-use result::Result::Ok;
-use ops::{Deref, FnOnce};
+use ops::Deref;
 use result;
-use slice::SliceExt;
+use num::Float;
 use slice;
-use str::{self, StrExt};
+use str;
 use self::rt::v1::Alignment;
 
 pub use self::num::radix;
@@ -38,7 +34,8 @@ mod num;
 mod float;
 mod builders;
 
-#[stable(feature = "rust1", since = "1.0.0")]
+#[cfg_attr(stage0, stable(feature = "rust1", since = "1.0.0"))]
+#[cfg_attr(not(stage0), unstable(feature = "core", reason = "internal to format_args!"))]
 #[doc(hidden)]
 pub mod rt {
     pub mod v1;
@@ -80,6 +77,23 @@ pub trait Write {
     /// This function will return an instance of `FormatError` on error.
     #[stable(feature = "rust1", since = "1.0.0")]
     fn write_str(&mut self, s: &str) -> Result;
+
+    /// Writes a `char` into this writer, returning whether the write succeeded.
+    ///
+    /// A single `char` may be encoded as more than one byte.
+    /// This method can only succeed if the entire byte sequence was successfully
+    /// written, and this method will not return until all data has been
+    /// written or an error occurs.
+    ///
+    /// # Errors
+    ///
+    /// This function will return an instance of `FormatError` on error.
+    #[stable(feature = "fmt_write_char", since = "1.1.0")]
+    fn write_char(&mut self, c: char) -> Result {
+        let mut utf_8 = [0u8; 4];
+        let bytes_written = c.encode_utf8(&mut utf_8).unwrap_or(0);
+        self.write_str(unsafe { mem::transmute(&utf_8[..bytes_written]) })
+    }
 
     /// Glue for usage of the `write!` macro with implementers of this trait.
     ///
@@ -134,7 +148,8 @@ enum Void {}
 /// compile time it is ensured that the function and the value have the correct
 /// types, and then this struct is used to canonicalize arguments to one type.
 #[derive(Copy)]
-#[stable(feature = "rust1", since = "1.0.0")]
+#[cfg_attr(stage0, stable(feature = "rust1", since = "1.0.0"))]
+#[cfg_attr(not(stage0), unstable(feature = "core", reason = "internal to format_args!"))]
 #[doc(hidden)]
 pub struct ArgumentV1<'a> {
     value: &'a Void,
@@ -154,7 +169,8 @@ impl<'a> ArgumentV1<'a> {
     }
 
     #[doc(hidden)]
-    #[stable(feature = "rust1", since = "1.0.0")]
+    #[cfg_attr(stage0, stable(feature = "rust1", since = "1.0.0"))]
+    #[cfg_attr(not(stage0), unstable(feature = "core", reason = "internal to format_args!"))]
     pub fn new<'b, T>(x: &'b T,
                       f: fn(&T, &mut Formatter) -> Result) -> ArgumentV1<'b> {
         unsafe {
@@ -166,7 +182,8 @@ impl<'a> ArgumentV1<'a> {
     }
 
     #[doc(hidden)]
-    #[stable(feature = "rust1", since = "1.0.0")]
+    #[cfg_attr(stage0, stable(feature = "rust1", since = "1.0.0"))]
+    #[cfg_attr(not(stage0), unstable(feature = "core", reason = "internal to format_args!"))]
     pub fn from_usize(x: &usize) -> ArgumentV1 {
         ArgumentV1::new(x, ArgumentV1::show_usize)
     }
@@ -189,7 +206,8 @@ impl<'a> Arguments<'a> {
     /// When using the format_args!() macro, this function is used to generate the
     /// Arguments structure.
     #[doc(hidden)] #[inline]
-    #[stable(feature = "rust1", since = "1.0.0")]
+    #[cfg_attr(stage0, stable(feature = "rust1", since = "1.0.0"))]
+    #[cfg_attr(not(stage0), unstable(feature = "core", reason = "internal to format_args!"))]
     pub fn new_v1(pieces: &'a [&'a str],
                   args: &'a [ArgumentV1<'a>]) -> Arguments<'a> {
         Arguments {
@@ -206,7 +224,8 @@ impl<'a> Arguments<'a> {
     /// created with `argumentusize`. However, failing to do so doesn't cause
     /// unsafety, but will ignore invalid .
     #[doc(hidden)] #[inline]
-    #[stable(feature = "rust1", since = "1.0.0")]
+    #[cfg_attr(stage0, stable(feature = "rust1", since = "1.0.0"))]
+    #[cfg_attr(not(stage0), unstable(feature = "core", reason = "internal to format_args!"))]
     pub fn new_v1_formatted(pieces: &'a [&'a str],
                             args: &'a [ArgumentV1<'a>],
                             fmt: &'a [rt::v1::Argument]) -> Arguments<'a> {
@@ -904,33 +923,39 @@ impl<'a, T> Pointer for &'a mut T {
     }
 }
 
+// Common code of floating point Debug and Display.
+fn float_to_str_common<T: float::MyFloat, F>(num: &T, precision: Option<usize>,
+                                             post: F) -> Result
+        where F : FnOnce(&str) -> Result {
+    let digits = match precision {
+        Some(i) => float::DigExact(i),
+        None => float::DigMax(6),
+    };
+    float::float_to_str_bytes_common(num.abs(),
+                                     digits,
+                                     float::ExpNone,
+                                     false,
+                                     post)
+}
+
 macro_rules! floating { ($ty:ident) => {
 
     #[stable(feature = "rust1", since = "1.0.0")]
     impl Debug for $ty {
         fn fmt(&self, fmt: &mut Formatter) -> Result {
-            Display::fmt(self, fmt)
+            float_to_str_common(self, fmt.precision, |absolute| {
+                // is_positive() counts -0.0 as negative
+                fmt.pad_integral(self.is_nan() || self.is_positive(), "", absolute)
+            })
         }
     }
 
     #[stable(feature = "rust1", since = "1.0.0")]
     impl Display for $ty {
         fn fmt(&self, fmt: &mut Formatter) -> Result {
-            use num::Float;
-
-            let digits = match fmt.precision {
-                Some(i) => float::DigExact(i),
-                None => float::DigMax(6),
-            };
-            float::float_to_str_bytes_common(self.abs(),
-                                             10,
-                                             true,
-                                             float::SignNeg,
-                                             digits,
-                                             float::ExpNone,
-                                             false,
-                                             |bytes| {
-                fmt.pad_integral(self.is_nan() || *self >= 0.0, "", bytes)
+            float_to_str_common(self, fmt.precision, |absolute| {
+                // simple comparison counts -0.0 as positive
+                fmt.pad_integral(self.is_nan() || *self >= 0.0, "", absolute)
             })
         }
     }
@@ -938,16 +963,11 @@ macro_rules! floating { ($ty:ident) => {
     #[stable(feature = "rust1", since = "1.0.0")]
     impl LowerExp for $ty {
         fn fmt(&self, fmt: &mut Formatter) -> Result {
-            use num::Float;
-
             let digits = match fmt.precision {
                 Some(i) => float::DigExact(i),
                 None => float::DigMax(6),
             };
             float::float_to_str_bytes_common(self.abs(),
-                                             10,
-                                             true,
-                                             float::SignNeg,
                                              digits,
                                              float::ExpDec,
                                              false,
@@ -960,16 +980,11 @@ macro_rules! floating { ($ty:ident) => {
     #[stable(feature = "rust1", since = "1.0.0")]
     impl UpperExp for $ty {
         fn fmt(&self, fmt: &mut Formatter) -> Result {
-            use num::Float;
-
             let digits = match fmt.precision {
                 Some(i) => float::DigExact(i),
                 None => float::DigMax(6),
             };
             float::float_to_str_bytes_common(self.abs(),
-                                             10,
-                                             true,
-                                             float::SignNeg,
                                              digits,
                                              float::ExpDec,
                                              true,

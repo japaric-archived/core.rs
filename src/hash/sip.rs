@@ -7,15 +7,12 @@
 // <LICENSE-MIT or http://opensource.org/licenses/MIT>, at your
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
-//
-// ignore-lexer-test FIXME #15883
 
 //! An implementation of SipHash 2-4.
 
 #![allow(deprecated)] // until the next snapshot for inherent wrapping ops
 
 use prelude::*;
-use default::Default;
 use super::Hasher;
 
 /// An implementation of SipHash 2-4.
