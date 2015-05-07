@@ -136,6 +136,7 @@ pub fn from_utf8(v: &[u8]) -> Result<&str, Utf8Error> {
 
 /// Converts a slice of bytes to a string slice without checking
 /// that the string contains valid UTF-8.
+#[inline(always)]
 #[stable(feature = "rust1", since = "1.0.0")]
 pub unsafe fn from_utf8_unchecked<'a>(v: &'a [u8]) -> &'a str {
     mem::transmute(v)
@@ -420,7 +421,7 @@ macro_rules! derive_pattern_clone {
 /// wrapping an private internal one that makes use of the `Pattern` API.
 ///
 /// For all patterns `P: Pattern<'a>` the following items will be
-/// generated (generics ommitted):
+/// generated (generics omitted):
 ///
 /// struct $forward_iterator($internal_iterator);
 /// struct $reverse_iterator($internal_iterator);

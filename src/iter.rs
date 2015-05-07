@@ -626,12 +626,10 @@ pub trait Iterator {
     /// # Examples
     ///
     /// ```
-    /// # #![feature(core)]
     /// let a = [1, 2, 3, 4, 5];
     /// let mut it = a.iter();
     /// assert!(it.any(|x| *x == 3));
-    /// assert_eq!(&it[..], [4, 5]);
-    ///
+    /// assert_eq!(it.collect::<Vec<_>>(), [&4, &5]);
     /// ```
     #[inline]
     #[stable(feature = "rust1", since = "1.0.0")]
@@ -654,11 +652,10 @@ pub trait Iterator {
     /// # Examples
     ///
     /// ```
-    /// # #![feature(core)]
     /// let a = [1, 2, 3, 4, 5];
     /// let mut it = a.iter();
     /// assert_eq!(it.find(|&x| *x == 3).unwrap(), &3);
-    /// assert_eq!(&it[..], [4, 5]);
+    /// assert_eq!(it.collect::<Vec<_>>(), [&4, &5]);
     #[inline]
     #[stable(feature = "rust1", since = "1.0.0")]
     fn find<P>(&mut self, mut predicate: P) -> Option<Self::Item> where
@@ -678,11 +675,10 @@ pub trait Iterator {
     /// # Examples
     ///
     /// ```
-    /// # #![feature(core)]
     /// let a = [1, 2, 3, 4, 5];
     /// let mut it = a.iter();
     /// assert_eq!(it.position(|x| *x == 3).unwrap(), 2);
-    /// assert_eq!(&it[..], [4, 5]);
+    /// assert_eq!(it.collect::<Vec<_>>(), [&4, &5]);
     #[inline]
     #[stable(feature = "rust1", since = "1.0.0")]
     fn position<P>(&mut self, mut predicate: P) -> Option<usize> where
@@ -708,11 +704,10 @@ pub trait Iterator {
     /// # Examples
     ///
     /// ```
-    /// # #![feature(core)]
     /// let a = [1, 2, 2, 4, 5];
     /// let mut it = a.iter();
     /// assert_eq!(it.rposition(|x| *x == 2).unwrap(), 2);
-    /// assert_eq!(&it[..], [1, 2]);
+    /// assert_eq!(it.collect::<Vec<_>>(), [&1, &2]);
     #[inline]
     #[stable(feature = "rust1", since = "1.0.0")]
     fn rposition<P>(&mut self, mut predicate: P) -> Option<usize> where
@@ -2402,14 +2397,10 @@ pub trait Step: PartialOrd {
     /// Steps `self` if possible.
     fn step(&self, by: &Self) -> Option<Self>;
 
-    /// Returns the number of steps between two step objects.
+    /// Returns the number of steps between two step objects. The count is
+    /// inclusive of `start` and exclusive of `end`.
     ///
-    /// `start` should always be less than `end`, so the result should never
-    /// be negative.
-    ///
-    /// `by` must be > 0.
-    ///
-    /// Returns `None` if it is not possible to calculate steps_between
+    /// Returns `None` if it is not possible to calculate `steps_between`
     /// without overflow.
     fn steps_between(start: &Self, end: &Self, by: &Self) -> Option<usize>;
 }
@@ -2424,9 +2415,16 @@ macro_rules! step_impl_unsigned {
             #[inline]
             #[allow(trivial_numeric_casts)]
             fn steps_between(start: &$t, end: &$t, by: &$t) -> Option<usize> {
-                if *start <= *end {
+                if *by == 0 { return None; }
+                if *start < *end {
                     // Note: We assume $t <= usize here
-                    Some((*end - *start) as usize / (*by as usize))
+                    let diff = (*end - *start) as usize;
+                    let by = *by as usize;
+                    if diff % by > 0 {
+                        Some(diff / by + 1)
+                    } else {
+                        Some(diff / by)
+                    }
                 } else {
                     Some(0)
                 }
@@ -2444,16 +2442,29 @@ macro_rules! step_impl_signed {
             #[inline]
             #[allow(trivial_numeric_casts)]
             fn steps_between(start: &$t, end: &$t, by: &$t) -> Option<usize> {
-                if *start <= *end {
+                if *by == 0 { return None; }
+                let mut diff: usize;
+                let mut by_u: usize;
+                if *by > 0 {
+                    if *start >= *end {
+                        return Some(0);
+                    }
                     // Note: We assume $t <= isize here
                     // Use .wrapping_sub and cast to usize to compute the
                     // difference that may not fit inside the range of isize.
-                    Some(
-                        ((*end as isize).wrapping_sub(*start as isize) as usize
-                        / (*by as usize))
-                    )
+                    diff = (*end as isize).wrapping_sub(*start as isize) as usize;
+                    by_u = *by as usize;
                 } else {
-                    Some(0)
+                    if *start <= *end {
+                        return Some(0);
+                    }
+                    diff = (*start as isize).wrapping_sub(*end as isize) as usize;
+                    by_u = (*by as isize).wrapping_mul(-1) as usize;
+                }
+                if diff % by_u > 0 {
+                    Some(diff / by_u + 1)
+                } else {
+                    Some(diff / by_u)
                 }
             }
         }
@@ -2673,6 +2684,16 @@ impl<A: Step + Zero + Clone> Iterator for StepBy<A, ops::Range<A>> {
             }
         } else {
             None
+        }
+    }
+
+    #[inline]
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        match Step::steps_between(&self.range.start,
+                                  &self.range.end,
+                                  &self.step_by) {
+            Some(hint) => (hint, Some(hint)),
+            None       => (0, None)
         }
     }
 }
