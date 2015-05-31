@@ -53,7 +53,7 @@
 #![staged_api]
 #![crate_type = "rlib"]
 #![doc(html_logo_url = "http://www.rust-lang.org/logos/rust-logo-128x128-blk-v2.png",
-       html_favicon_url = "http://www.rust-lang.org/favicon.ico",
+       html_favicon_url = "https://doc.rust-lang.org/favicon.ico",
        html_root_url = "http://doc.rust-lang.org/nightly/",
        html_playground_url = "http://play.rust-lang.org/")]
 #![doc(test(no_crate_inject))]
@@ -74,6 +74,7 @@
 #![feature(concat_idents)]
 #![feature(reflect)]
 #![feature(custom_attribute)]
+#![feature(const_fn)]
 
 #[macro_use]
 mod macros;
