@@ -1,3 +1,14 @@
+# Status
+
+This project has been **SUPERSEDED** by [`cargo-sysroot`], a tool to cross compile the standard
+crates in a "sysroot".
+
+[`cargo-sysroot`]: https://github.com/japaric/cargo-sysroot
+
+-- @japaric, 2016/02/05
+
+---
+
 # `core.rs`
 
 Cargo version of [rust-lang/rust]'s libcore.
